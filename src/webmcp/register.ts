@@ -1,10 +1,12 @@
 import { products } from '../data/products'
+import { featureDefinitions } from '../domain/features'
 import { compareProducts, optimizeCurrentStack, recommendStack } from '../domain/recommender'
 import { calculateProductCost } from '../domain/tco'
-import type { Category, Feature, RecommendInput } from '../domain/types'
+import type { Feature, RecommendInput } from '../domain/types'
 
 const categorySchema = { type: 'string', enum: ['hosting', 'seo', 'vpn'] }
-const featureSchema = { type: 'string' }
+const featureSchema = { type: 'string', enum: featureDefinitions.map((feature) => feature.id) }
+const productIdSchema = { type: 'string', enum: products.map((product) => product.id) }
 
 export async function registerWebMCPTools(onAgentRecommendation?: (input: RecommendInput) => void) {
   if (!document.modelContext) return () => undefined
@@ -19,7 +21,7 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
       type: 'object',
       properties: {
         categories: { type: 'array', items: categorySchema, minItems: 1 },
-        requirements: { type: 'array', items: featureSchema },
+        requirements: { type: 'array', items: featureSchema, uniqueItems: true },
         budgetEurMonthly: { type: 'number', minimum: 0 },
         market: { type: 'string', default: 'ES' },
         priority: { type: 'string', enum: ['balanced', 'lowest_cost', 'simplicity'], default: 'balanced' },
@@ -41,8 +43,8 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
     inputSchema: {
       type: 'object',
       properties: {
-        productIds: { type: 'array', items: { type: 'string' }, minItems: 2 },
-        requirements: { type: 'array', items: featureSchema },
+        productIds: { type: 'array', items: productIdSchema, minItems: 2, uniqueItems: true },
+        requirements: { type: 'array', items: featureSchema, uniqueItems: true },
       },
       required: ['productIds'],
     },
@@ -56,7 +58,7 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
     description: 'Calculate first-term monthly-equivalent and renewal-normalized EUR cost for one or more catalog products, using the stored official commercial terms and dated ECB planning FX rates.',
     inputSchema: {
       type: 'object',
-      properties: { productIds: { type: 'array', items: { type: 'string' }, minItems: 1 } },
+      properties: { productIds: { type: 'array', items: productIdSchema, minItems: 1, uniqueItems: true } },
       required: ['productIds'],
     },
     annotations: { readOnlyHint: true },
@@ -69,13 +71,13 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
   await document.modelContext.registerTool({
     name: 'optimize_current_stack',
     title: 'Optimize an existing software stack',
-    description: 'Find a compatible lower-cost replacement stack and quantify indicative monthly and annualized savings versus the user’s current StackPilot product IDs.',
+    description: 'Find a compatible lower-cost replacement stack and quantify indicative monthly and annualized savings versus the user’s current StackPilot product IDs. Savings are returned only when a complete compatible replacement exists.',
     inputSchema: {
       type: 'object',
       properties: {
-        currentProductIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
-        categories: { type: 'array', items: categorySchema, minItems: 1 },
-        requirements: { type: 'array', items: featureSchema },
+        currentProductIds: { type: 'array', items: productIdSchema, minItems: 1, uniqueItems: true },
+        categories: { type: 'array', items: categorySchema, minItems: 1, uniqueItems: true },
+        requirements: { type: 'array', items: featureSchema, uniqueItems: true },
         budgetEurMonthly: { type: 'number', minimum: 0 },
         market: { type: 'string', default: 'ES' },
       },

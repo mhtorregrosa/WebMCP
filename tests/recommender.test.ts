@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { products } from '../src/data/products'
+import { validateProducts } from '../src/data/validate'
 import { toEur } from '../src/domain/fx'
 import { optimizeCurrentStack, recommendStack } from '../src/domain/recommender'
 import { calculateProductCost } from '../src/domain/tco'
+
+describe('dataset', () => {
+  it('passes structural validation', () => {
+    expect(validateProducts(products)).toEqual([])
+  })
+
+  it('detects duplicate IDs', () => {
+    expect(validateProducts([products[0], products[0]])).toContain(`duplicate id: ${products[0].id}`)
+  })
+})
 
 describe('FX', () => {
   it('converts ECB-quoted USD and GBP to EUR', () => {
@@ -24,24 +35,43 @@ describe('recommendStack', () => {
   it('selects one compatible product per requested category', () => {
     const result = recommendStack(products, { categories: ['hosting', 'seo', 'vpn'], market: 'ES', priority: 'balanced' })
     expect(result.selected).toHaveLength(3)
+    expect(result.complete).toBe(true)
     expect(new Set(result.selected.map((item) => item.product.category)).size).toBe(3)
   })
 
   it('honors hard feature requirements within a category', () => {
     const result = recommendStack(products, { categories: ['vpn'], requirements: ['password_manager'], market: 'ES' })
     expect(result.selected[0].product.id).toBe('nordvpn-complete-27m')
+    expect(result.complete).toBe(true)
   })
 
-  it('reports whether the recommended stack is inside budget', () => {
+  it('keeps an impossible hard requirement instead of silently dropping it', () => {
+    const result = recommendStack(products, { categories: ['seo'], requirements: ['api'], budgetEurMonthly: 500, market: 'ES' })
+    expect(result.selected).toHaveLength(0)
+    expect(result.complete).toBe(false)
+    expect(result.withinBudget).toBeNull()
+    expect(result.rationale.some((line) => line.includes('No seo product'))).toBe(true)
+  })
+
+  it('reports whether a complete recommended stack is inside budget', () => {
     const result = recommendStack(products, { categories: ['hosting'], budgetEurMonthly: 3, market: 'ES', priority: 'lowest_cost' })
+    expect(result.complete).toBe(true)
     expect(result.withinBudget).toBe(true)
   })
 })
 
 describe('optimizeCurrentStack', () => {
-  it('returns a reproducible savings calculation', () => {
+  it('returns a reproducible savings calculation for a complete recommendation', () => {
     const result = optimizeCurrentStack(products, ['semrush-seo-pro-annual'], { categories: ['seo'], market: 'ES', priority: 'lowest_cost' })
+    expect(result.comparable).toBe(true)
     expect(result.currentMonthlyEur).toBeGreaterThan(result.recommendedMonthlyEur)
     expect(result.annualizedSavingEur).toBeGreaterThan(0)
+  })
+
+  it('does not claim savings when the replacement stack is incomplete', () => {
+    const result = optimizeCurrentStack(products, ['semrush-seo-pro-annual'], { categories: ['seo'], requirements: ['api'], market: 'ES' })
+    expect(result.comparable).toBe(false)
+    expect(result.monthlySavingEur).toBeUndefined()
+    expect(result.annualizedSavingEur).toBeUndefined()
   })
 })

@@ -1,4 +1,5 @@
 import { products } from '../data/catalog'
+import { validateComparison } from '../domain/comparison'
 import { featureDefinitions } from '../domain/features'
 import { compareProducts, optimizeCurrentStack, recommendStack } from '../domain/recommender'
 import { calculateProductCost } from '../domain/tco'
@@ -26,11 +27,15 @@ function isPriority(value: unknown): value is NonNullable<RecommendInput['priori
   return typeof value === 'string' && priorities.includes(value as NonNullable<RecommendInput['priority']>)
 }
 
+function parseFeatures(value: unknown): Feature[] {
+  return stringArray(value).filter((feature): feature is Feature => knownFeatures.has(feature as Feature))
+}
+
 function parseRecommendInput(raw: Record<string, unknown>): RecommendInput {
   const parsedCategories = stringArray(raw.categories).filter(isCategory)
   if (parsedCategories.length === 0) throw new Error('At least one valid category is required.')
 
-  const requirements = stringArray(raw.requirements).filter((feature): feature is Feature => knownFeatures.has(feature as Feature))
+  const requirements = parseFeatures(raw.requirements)
   const budgetEurMonthly = typeof raw.budgetEurMonthly === 'number' && Number.isFinite(raw.budgetEurMonthly)
     ? raw.budgetEurMonthly
     : undefined
@@ -77,7 +82,7 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
   await document.modelContext.registerTool({
     name: 'compare_products',
     title: 'Compare software products',
-    description: 'Compare specific StackPilot products using the same deterministic feature-fit and TCO engine used by the human interface.',
+    description: 'Compare two or more StackPilot products within the same category using the same deterministic feature-fit and TCO engine used by the human interface. Do not use this tool to compare unrelated categories.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -89,8 +94,10 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
     annotations: { readOnlyHint: true },
     execute: async (raw) => {
       const productIds = parseProductIds(raw.productIds, 2)
-      const requirements = stringArray(raw.requirements).filter((feature): feature is Feature => knownFeatures.has(feature as Feature))
-      return JSON.stringify(compareProducts(products, productIds, requirements))
+      const requirements = parseFeatures(raw.requirements)
+      const validation = validateComparison(products, productIds, requirements)
+      if (!validation.ok) return JSON.stringify({ error: validation })
+      return JSON.stringify({ category: validation.category, results: compareProducts(products, productIds, requirements) })
     },
   }, options)
 

@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { products } from '../src/data/products'
+import { validateProducts } from '../src/data/validate'
 import { toEur } from '../src/domain/fx'
 import { optimizeCurrentStack, recommendStack } from '../src/domain/recommender'
 import { calculateProductCost } from '../src/domain/tco'
+
+describe('dataset', () => {
+  it('passes structural validation', () => {
+    expect(validateProducts(products)).toEqual([])
+  })
+
+  it('detects duplicate IDs', () => {
+    expect(validateProducts([products[0], products[0]])).toContain(`duplicate id: ${products[0].id}`)
+  })
+})
 
 describe('FX', () => {
   it('converts ECB-quoted USD and GBP to EUR', () => {
@@ -30,6 +41,11 @@ describe('recommendStack', () => {
   it('honors hard feature requirements within a category', () => {
     const result = recommendStack(products, { categories: ['vpn'], requirements: ['password_manager'], market: 'ES' })
     expect(result.selected[0].product.id).toBe('nordvpn-complete-27m')
+  })
+
+  it('returns no product when no candidate meets a hard requirement', () => {
+    const result = recommendStack(products, { categories: ['seo'], requirements: ['api'], market: 'ES' })
+    expect(result.selected).toHaveLength(0)
   })
 
   it('reports whether the recommended stack is inside budget', () => {

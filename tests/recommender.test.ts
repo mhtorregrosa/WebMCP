@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { products } from '../src/data/catalog'
 import { validateProducts } from '../src/data/validate'
+import { validateComparison } from '../src/domain/comparison'
 import { toEur } from '../src/domain/fx'
 import { optimizeCurrentStack, recommendStack } from '../src/domain/recommender'
 import { calculateProductCost } from '../src/domain/tco'
@@ -54,6 +55,24 @@ describe('TCO', () => {
     const cost = calculateProductCost(product)
     expect(cost.firstTermMonthlyEur).toBeCloseTo(2.57, 2)
     expect(cost.renewalMonthlyEur).toBeCloseTo(7.15, 2)
+  })
+})
+
+describe('comparison semantics', () => {
+  it('allows products within the same category', () => {
+    expect(validateComparison(products, ['nordvpn-complete-27m', 'expressvpn-advanced-28m'], ['password_manager'])).toEqual({ ok: true, category: 'vpn' })
+  })
+
+  it('rejects cross-category comparisons', () => {
+    const result = validateComparison(products, ['nordvpn-complete-27m', 'semrush-seo-pro-annual'])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.code).toBe('cross_category_comparison')
+  })
+
+  it('rejects requirements from a different category', () => {
+    const result = validateComparison(products, ['nordvpn-complete-27m', 'expressvpn-advanced-28m'], ['rank_tracking'])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.code).toBe('requirement_category_mismatch')
   })
 })
 

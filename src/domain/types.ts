@@ -48,6 +48,7 @@ export interface Product {
   simplicity: number
   markets: string[]
   source: SourceRecord
+  evidence?: SourceRecord[]
 }
 
 export interface RecommendInput {

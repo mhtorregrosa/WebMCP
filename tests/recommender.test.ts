@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { products } from '../src/data/products'
+import { products } from '../src/data/catalog'
 import { validateProducts } from '../src/data/validate'
 import { toEur } from '../src/domain/fx'
 import { optimizeCurrentStack, recommendStack } from '../src/domain/recommender'
@@ -21,6 +21,12 @@ describe('dataset', () => {
     for (const category of ['hosting', 'seo', 'vpn'] as const) {
       expect(new Set(products.filter((product) => product.category === category).map((product) => product.vendor)).size).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it('retains supplemental evidence for vendor capabilities not proven by the pricing page alone', () => {
+    const semrushBusiness = products.find((product) => product.id === 'semrush-seo-business-annual')!
+    expect(semrushBusiness.evidence?.some((source) => source.url.includes('/kb/5-api'))).toBe(true)
+    expect(semrushBusiness.evidence?.some((source) => source.url.includes('/kb/1618-mcp'))).toBe(true)
   })
 
   it('detects duplicate IDs', () => {

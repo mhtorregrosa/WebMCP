@@ -14,6 +14,7 @@ export type Feature =
   | 'competitor_analysis'
   | 'mcp_access'
   | 'api'
+  | 'sso'
   | 'vpn'
   | 'malware_protection'
   | 'password_manager'

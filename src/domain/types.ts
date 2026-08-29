@@ -68,6 +68,7 @@ export interface ProductScore {
 
 export interface StackRecommendation {
   selected: ProductScore[]
+  complete: boolean
   monthlyEur: number
   renewalMonthlyEur?: number
   withinBudget: boolean | null

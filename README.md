@@ -2,11 +2,15 @@
 
 Agent-native software stack optimizer built with WebMCP.
 
+**[Open the live WebMCP app](https://mhtorregrosa.github.io/WebMCP/)**
+
 StackPilot turns software selection into a deterministic decision problem: requirements, constraints, verified pricing and renewal costs go in; a reproducible recommendation comes out. The same engine powers the human UI and WebMCP tools.
 
 ## Status
 
 Challenge MVP for the OpenAI WebMCP Challenge (August–September 2026).
+
+The deployed app exposes all four tools in the ChatGPT/Codex in-app browser. The 20-scenario challenge QA suite passes, including visible agent/UI state synchronization, fail-closed hard constraints, invalid comparisons, source-backed TCO and compatible-stack optimization. See [`docs/QA_EVIDENCE.md`](docs/QA_EVIDENCE.md).
 
 ## Principles
 

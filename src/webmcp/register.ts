@@ -2,14 +2,52 @@ import { products } from '../data/catalog'
 import { featureDefinitions } from '../domain/features'
 import { compareProducts, optimizeCurrentStack, recommendStack } from '../domain/recommender'
 import { calculateProductCost } from '../domain/tco'
-import type { Feature, RecommendInput } from '../domain/types'
+import type { Category, Feature, RecommendInput } from '../domain/types'
 
-const categorySchema = { type: 'string', enum: ['hosting', 'seo', 'vpn'] }
+const categories = ['hosting', 'seo', 'vpn'] as const satisfies readonly Category[]
+const priorities = ['balanced', 'lowest_cost', 'simplicity'] as const
+const knownFeatures = new Set<Feature>(featureDefinitions.map((feature) => feature.id))
+const knownProductIds = new Set(products.map((product) => product.id))
+
+const categorySchema = { type: 'string', enum: [...categories] }
 const featureSchema = { type: 'string', enum: featureDefinitions.map((feature) => feature.id) }
 const productIdSchema = { type: 'string', enum: products.map((product) => product.id) }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return []
+  return value
+}
+
+function isCategory(value: string): value is Category {
+  return categories.includes(value as Category)
+}
+
+function isPriority(value: unknown): value is NonNullable<RecommendInput['priority']> {
+  return typeof value === 'string' && priorities.includes(value as NonNullable<RecommendInput['priority']>)
+}
+
+function parseRecommendInput(raw: Record<string, unknown>): RecommendInput {
+  const parsedCategories = stringArray(raw.categories).filter(isCategory)
+  if (parsedCategories.length === 0) throw new Error('At least one valid category is required.')
+
+  const requirements = stringArray(raw.requirements).filter((feature): feature is Feature => knownFeatures.has(feature as Feature))
+  const budgetEurMonthly = typeof raw.budgetEurMonthly === 'number' && Number.isFinite(raw.budgetEurMonthly)
+    ? raw.budgetEurMonthly
+    : undefined
+  const market = typeof raw.market === 'string' ? raw.market : 'ES'
+  const priority = isPriority(raw.priority) ? raw.priority : 'balanced'
+
+  return { categories: parsedCategories, requirements, budgetEurMonthly, market, priority }
+}
+
+function parseProductIds(value: unknown, minimum: number): string[] {
+  const ids = stringArray(value).filter((id) => knownProductIds.has(id))
+  if (ids.length < minimum) throw new Error(`At least ${minimum} valid product ID${minimum === 1 ? '' : 's'} required.`)
+  return ids
+}
+
 export async function registerWebMCPTools(onAgentRecommendation?: (input: RecommendInput) => void) {
-  if (!document.modelContext) return () => undefined
+  if (!('modelContext' in document) || !document.modelContext) return () => undefined
   const controller = new AbortController()
   const options = { signal: controller.signal }
 
@@ -20,17 +58,17 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
     inputSchema: {
       type: 'object',
       properties: {
-        categories: { type: 'array', items: categorySchema, minItems: 1 },
+        categories: { type: 'array', items: categorySchema, minItems: 1, uniqueItems: true },
         requirements: { type: 'array', items: featureSchema, uniqueItems: true },
         budgetEurMonthly: { type: 'number', minimum: 0 },
         market: { type: 'string', default: 'ES' },
-        priority: { type: 'string', enum: ['balanced', 'lowest_cost', 'simplicity'], default: 'balanced' },
+        priority: { type: 'string', enum: [...priorities], default: 'balanced' },
       },
       required: ['categories'],
     },
     annotations: { readOnlyHint: true },
     execute: async (raw) => {
-      const input = raw as RecommendInput
+      const input = parseRecommendInput(raw)
       onAgentRecommendation?.(input)
       return JSON.stringify(recommendStack(products, input))
     },
@@ -49,7 +87,11 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
       required: ['productIds'],
     },
     annotations: { readOnlyHint: true },
-    execute: async ({ productIds, requirements = [] }) => JSON.stringify(compareProducts(products, productIds, requirements as Feature[])),
+    execute: async (raw) => {
+      const productIds = parseProductIds(raw.productIds, 2)
+      const requirements = stringArray(raw.requirements).filter((feature): feature is Feature => knownFeatures.has(feature as Feature))
+      return JSON.stringify(compareProducts(products, productIds, requirements))
+    },
   }, options)
 
   await document.modelContext.registerTool({
@@ -62,7 +104,7 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
       required: ['productIds'],
     },
     annotations: { readOnlyHint: true },
-    execute: async ({ productIds }) => JSON.stringify((productIds as string[]).map((id) => {
+    execute: async (raw) => JSON.stringify(parseProductIds(raw.productIds, 1).map((id) => {
       const product = products.find((item) => item.id === id)
       return product
         ? { id, cost: calculateProductCost(product), sources: [product.source, ...(product.evidence ?? [])] }
@@ -82,11 +124,16 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
         requirements: { type: 'array', items: featureSchema, uniqueItems: true },
         budgetEurMonthly: { type: 'number', minimum: 0 },
         market: { type: 'string', default: 'ES' },
+        priority: { type: 'string', enum: [...priorities], default: 'balanced' },
       },
       required: ['currentProductIds', 'categories'],
     },
     annotations: { readOnlyHint: true },
-    execute: async ({ currentProductIds, ...input }) => JSON.stringify(optimizeCurrentStack(products, currentProductIds as string[], input as RecommendInput)),
+    execute: async (raw) => {
+      const currentProductIds = parseProductIds(raw.currentProductIds, 1)
+      const input = parseRecommendInput(raw)
+      return JSON.stringify(optimizeCurrentStack(products, currentProductIds, input))
+    },
   }, options)
 
   return () => controller.abort()

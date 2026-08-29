@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { products } from './data/products'
+import { featureDefinitions } from './domain/features'
 import { recommendStack } from './domain/recommender'
 import type { Category, Feature, RecommendInput, StackRecommendation } from './domain/types'
 import { registerWebMCPTools } from './webmcp/register'
@@ -10,18 +11,11 @@ const categories: { id: Category; label: string }[] = [
   { id: 'vpn', label: 'VPN / security' },
 ]
 
-const featureOptions: { id: Feature; label: string; category: Category }[] = [
-  { id: 'managed_hosting', label: 'Managed hosting', category: 'hosting' },
-  { id: 'wordpress', label: 'WordPress', category: 'hosting' },
-  { id: 'daily_backups', label: 'Daily backups', category: 'hosting' },
-  { id: 'seo_audit', label: 'Site audit', category: 'seo' },
-  { id: 'rank_tracking', label: 'Rank tracking', category: 'seo' },
-  { id: 'mcp_access', label: 'MCP access', category: 'seo' },
-  { id: 'api', label: 'API access', category: 'seo' },
-  { id: 'vpn', label: 'VPN', category: 'vpn' },
-  { id: 'malware_protection', label: 'Malware protection', category: 'vpn' },
-  { id: 'password_manager', label: 'Password manager', category: 'vpn' },
-]
+const humanFeatureOptions = featureDefinitions.filter((feature) => [
+  'managed_hosting', 'wordpress', 'daily_backups',
+  'seo_audit', 'rank_tracking', 'mcp_access', 'api',
+  'vpn', 'malware_protection', 'password_manager',
+].includes(feature.id))
 
 export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(['hosting', 'seo', 'vpn'])
@@ -45,12 +39,12 @@ export default function App() {
   }, [])
 
   const catalogUpdated = useMemo(() => products.map((p) => p.source.verifiedAt).sort().at(-1), [])
-  const activeFeatureOptions = featureOptions.filter((option) => selectedCategories.includes(option.category))
+  const activeFeatureOptions = humanFeatureOptions.filter((option) => selectedCategories.includes(option.category))
 
   const toggleCategory = (category: Category) => {
     setSelectedCategories((current) => {
       if (current.includes(category)) {
-        setSelectedRequirements((requirements) => requirements.filter((feature) => featureOptions.find((option) => option.id === feature)?.category !== category))
+        setSelectedRequirements((requirements) => requirements.filter((feature) => featureDefinitions.find((option) => option.id === feature)?.category !== category))
         return current.filter((item) => item !== category)
       }
       return [...current, category]
@@ -73,6 +67,14 @@ export default function App() {
     }))
   }
 
+  const budgetLabel = !result?.complete
+    ? 'Incomplete'
+    : result.withinBudget === false
+      ? 'Over budget'
+      : 'Within budget'
+
+  const badgeClass = !result?.complete ? 'badge incomplete' : result.withinBudget === false ? 'badge bad' : 'badge'
+
   return (
     <main>
       <header>
@@ -92,7 +94,7 @@ export default function App() {
       </section>
 
       {result && <section className="results" aria-live="polite">
-        <div className="resultHeader"><div><p className="eyebrow">{agentUpdate ? 'Updated by agent' : 'Recommendation'}</p><h2>€{result.monthlyEur.toFixed(2)}<small>/mo first-term equivalent</small></h2></div><div className={result.withinBudget === false ? 'badge bad' : 'badge'}>{result.withinBudget === false ? 'Over budget' : 'Within budget'}</div></div>
+        <div className="resultHeader"><div><p className="eyebrow">{agentUpdate ? 'Updated by agent' : 'Recommendation'}</p><h2>€{result.monthlyEur.toFixed(2)}<small>/mo {result.complete ? 'first-term equivalent' : 'for compatible categories only'}</small></h2></div><div className={badgeClass}>{budgetLabel}</div></div>
         {result.renewalMonthlyEur != null && <p className="renewal">Renewal-normalized: <strong>€{result.renewalMonthlyEur.toFixed(2)}/mo</strong></p>}
         <div className="cards">{result.selected.map((item) => <article key={item.product.id}><div className="category">{item.product.category}</div><h3>{item.product.vendor} {item.product.name}</h3><p>{item.product.description}</p><dl><div><dt>Fit</dt><dd>{item.featureFit}%</dd></div><div><dt>First term</dt><dd>€{item.monthlyEur.toFixed(2)}/mo</dd></div>{item.renewalMonthlyEur != null && <div><dt>Renewal</dt><dd>€{item.renewalMonthlyEur.toFixed(2)}/mo</dd></div>}</dl><a href={item.product.source.url} target="_blank" rel="noreferrer">Official source ↗</a></article>)}</div>
         {result.selected.length === 0 && <p>No catalog product satisfies the current hard requirements.</p>}

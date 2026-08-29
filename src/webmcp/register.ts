@@ -1,4 +1,4 @@
-import { products } from '../data/products'
+import { products } from '../data/catalog'
 import { featureDefinitions } from '../domain/features'
 import { compareProducts, optimizeCurrentStack, recommendStack } from '../domain/recommender'
 import { calculateProductCost } from '../domain/tco'
@@ -64,7 +64,9 @@ export async function registerWebMCPTools(onAgentRecommendation?: (input: Recomm
     annotations: { readOnlyHint: true },
     execute: async ({ productIds }) => JSON.stringify((productIds as string[]).map((id) => {
       const product = products.find((item) => item.id === id)
-      return product ? { id, cost: calculateProductCost(product), source: product.source } : { id, error: 'unknown_product' }
+      return product
+        ? { id, cost: calculateProductCost(product), sources: [product.source, ...(product.evidence ?? [])] }
+        : { id, error: 'unknown_product' }
     })),
   }, options)
 

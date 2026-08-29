@@ -1,3 +1,4 @@
+import { featureCategory } from './features'
 import { FX_AS_OF, roundMoney } from './fx'
 import { calculateProductCost } from './tco'
 import type { Category, Feature, Product, ProductScore, RecommendInput, StackRecommendation } from './types'
@@ -32,9 +33,8 @@ export function scoreProduct(product: Product, requirements: Feature[] = [], pri
   }
 }
 
-function requirementsForCategory(requirements: Feature[], products: Product[], category: Category): Feature[] {
-  const categoryFeatures = new Set(products.filter((p) => p.category === category).flatMap((p) => p.features))
-  return requirements.filter((feature) => categoryFeatures.has(feature))
+function requirementsForCategory(requirements: Feature[], category: Category): Feature[] {
+  return requirements.filter((feature) => featureCategory[feature] === category)
 }
 
 export function recommendStack(products: Product[], input: RecommendInput): StackRecommendation {
@@ -44,7 +44,7 @@ export function recommendStack(products: Product[], input: RecommendInput): Stac
 
   for (const category of input.categories) {
     const candidates = products.filter((product) => product.category === category && (product.markets.includes(market) || product.markets.includes('GLOBAL')))
-    const categoryRequirements = requirementsForCategory(requirements, products, category)
+    const categoryRequirements = requirementsForCategory(requirements, category)
     const ranked = candidates
       .map((product) => scoreProduct(product, categoryRequirements, input.priority))
       .filter((score) => score.missingRequired.length === 0)
@@ -54,13 +54,15 @@ export function recommendStack(products: Product[], input: RecommendInput): Stac
   }
 
   const monthlyEur = roundMoney(selected.reduce((sum, item) => sum + item.monthlyEur, 0))
-  const renewalKnown = selected.every((item) => item.renewalMonthlyEur != null)
+  const renewalKnown = selected.length > 0 && selected.every((item) => item.renewalMonthlyEur != null)
   const renewalMonthlyEur = renewalKnown
     ? roundMoney(selected.reduce((sum, item) => sum + (item.renewalMonthlyEur ?? 0), 0))
     : undefined
   const withinBudget = input.budgetEurMonthly == null ? null : monthlyEur <= input.budgetEurMonthly
 
   const rationale = selected.map((item) => `${item.product.vendor} ${item.product.name}: ${item.featureFit}% required-feature fit; first-term equivalent €${item.monthlyEur}/mo.`)
+  const missingCategories = input.categories.filter((category) => !selected.some((item) => item.product.category === category))
+  for (const category of missingCategories) rationale.push(`No ${category} product in the current catalog satisfies all hard requirements for that category.`)
   if (input.budgetEurMonthly != null) rationale.push(withinBudget ? 'The selected stack fits the stated monthly planning budget.' : 'The selected stack exceeds the stated monthly planning budget.')
   if (renewalMonthlyEur != null && renewalMonthlyEur > monthlyEur * 1.15) rationale.push('Renewal-normalized cost is materially higher than the introductory first-term equivalent.')
 

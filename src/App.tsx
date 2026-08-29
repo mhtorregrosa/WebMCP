@@ -17,6 +17,13 @@ const humanFeatureOptions = featureDefinitions.filter((feature) => [
   'vpn', 'malware_protection', 'password_manager',
 ].includes(feature.id))
 
+export function visibleFeatureOptions(selectedCategories: Category[], selectedRequirements: Feature[]) {
+  return featureDefinitions.filter((option) => selectedCategories.includes(option.category) && (
+    humanFeatureOptions.some((feature) => feature.id === option.id)
+    || selectedRequirements.includes(option.id)
+  ))
+}
+
 export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(['hosting', 'seo', 'vpn'])
   const [selectedRequirements, setSelectedRequirements] = useState<Feature[]>([])
@@ -39,7 +46,7 @@ export default function App() {
   }, [])
 
   const catalogUpdated = useMemo(() => products.map((p) => p.source.verifiedAt).sort().at(-1), [])
-  const activeFeatureOptions = humanFeatureOptions.filter((option) => selectedCategories.includes(option.category))
+  const activeFeatureOptions = visibleFeatureOptions(selectedCategories, selectedRequirements)
 
   const toggleCategory = (category: Category) => {
     setSelectedCategories((current) => {

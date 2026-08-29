@@ -19,6 +19,7 @@ export const featureDefinitions: FeatureDefinition[] = [
   { id: 'competitor_analysis', label: 'Competitor analysis', category: 'seo' },
   { id: 'mcp_access', label: 'MCP access', category: 'seo' },
   { id: 'api', label: 'API access', category: 'seo' },
+  { id: 'sso', label: 'Single sign-on (SSO)', category: 'seo' },
   { id: 'vpn', label: 'VPN', category: 'vpn' },
   { id: 'malware_protection', label: 'Malware protection', category: 'vpn' },
   { id: 'password_manager', label: 'Password manager', category: 'vpn' },

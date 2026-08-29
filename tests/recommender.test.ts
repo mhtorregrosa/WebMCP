@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { products } from '../src/data/products'
+import { products } from '../src/data/catalog'
 import { validateProducts } from '../src/data/validate'
 import { toEur } from '../src/domain/fx'
 import { optimizeCurrentStack, recommendStack } from '../src/domain/recommender'
@@ -8,6 +8,25 @@ import { calculateProductCost } from '../src/domain/tco'
 describe('dataset', () => {
   it('passes structural validation', () => {
     expect(validateProducts(products)).toEqual([])
+  })
+
+  it('contains exactly five verified plans per seed category', () => {
+    expect(products).toHaveLength(15)
+    expect(products.filter((product) => product.category === 'hosting')).toHaveLength(5)
+    expect(products.filter((product) => product.category === 'seo')).toHaveLength(5)
+    expect(products.filter((product) => product.category === 'vpn')).toHaveLength(5)
+  })
+
+  it('has at least two vendors per category', () => {
+    for (const category of ['hosting', 'seo', 'vpn'] as const) {
+      expect(new Set(products.filter((product) => product.category === category).map((product) => product.vendor)).size).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('retains supplemental evidence for vendor capabilities not proven by the pricing page alone', () => {
+    const semrushBusiness = products.find((product) => product.id === 'semrush-seo-business-annual')!
+    expect(semrushBusiness.evidence?.some((source) => source.url.includes('/kb/5-api'))).toBe(true)
+    expect(semrushBusiness.evidence?.some((source) => source.url.includes('/kb/1618-mcp'))).toBe(true)
   })
 
   it('detects duplicate IDs', () => {
@@ -29,6 +48,13 @@ describe('TCO', () => {
     expect(cost.firstTermMonthlyEur).toBe(2.59)
     expect(cost.renewalMonthlyEur).toBe(9.99)
   })
+
+  it('normalizes an ExpressVPN multi-year offer and annual renewal independently', () => {
+    const product = products.find((item) => item.id === 'expressvpn-basic-28m')!
+    const cost = calculateProductCost(product)
+    expect(cost.firstTermMonthlyEur).toBeCloseTo(2.57, 2)
+    expect(cost.renewalMonthlyEur).toBeCloseTo(7.15, 2)
+  })
 })
 
 describe('recommendStack', () => {
@@ -39,14 +65,21 @@ describe('recommendStack', () => {
     expect(new Set(result.selected.map((item) => item.product.category)).size).toBe(3)
   })
 
-  it('honors hard feature requirements within a category', () => {
+  it('honors a hard feature requirement without pinning a vendor', () => {
     const result = recommendStack(products, { categories: ['vpn'], requirements: ['password_manager'], market: 'ES' })
-    expect(result.selected[0].product.id).toBe('nordvpn-complete-27m')
+    expect(result.selected).toHaveLength(1)
+    expect(result.selected[0].product.features).toContain('password_manager')
     expect(result.complete).toBe(true)
   })
 
-  it('keeps an impossible hard requirement instead of silently dropping it', () => {
-    const result = recommendStack(products, { categories: ['seo'], requirements: ['api'], budgetEurMonthly: 500, market: 'ES' })
+  it('can satisfy API access now that verified plans expose it', () => {
+    const result = recommendStack(products, { categories: ['seo'], requirements: ['api'], market: 'ES' })
+    expect(result.complete).toBe(true)
+    expect(result.selected[0].product.features).toContain('api')
+  })
+
+  it('keeps an impossible SSO requirement instead of silently dropping it', () => {
+    const result = recommendStack(products, { categories: ['seo'], requirements: ['sso'], budgetEurMonthly: 500, market: 'ES' })
     expect(result.selected).toHaveLength(0)
     expect(result.complete).toBe(false)
     expect(result.withinBudget).toBeNull()
@@ -69,7 +102,7 @@ describe('optimizeCurrentStack', () => {
   })
 
   it('does not claim savings when the replacement stack is incomplete', () => {
-    const result = optimizeCurrentStack(products, ['semrush-seo-pro-annual'], { categories: ['seo'], requirements: ['api'], market: 'ES' })
+    const result = optimizeCurrentStack(products, ['semrush-seo-pro-annual'], { categories: ['seo'], requirements: ['sso'], market: 'ES' })
     expect(result.comparable).toBe(false)
     expect(result.monthlySavingEur).toBeUndefined()
     expect(result.annualizedSavingEur).toBeUndefined()

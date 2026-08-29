@@ -53,20 +53,21 @@ export function recommendStack(products: Product[], input: RecommendInput): Stac
     if (ranked[0]) selected.push(ranked[0])
   }
 
+  const complete = input.categories.length > 0 && selected.length === input.categories.length
   const monthlyEur = roundMoney(selected.reduce((sum, item) => sum + item.monthlyEur, 0))
-  const renewalKnown = selected.length > 0 && selected.every((item) => item.renewalMonthlyEur != null)
+  const renewalKnown = complete && selected.every((item) => item.renewalMonthlyEur != null)
   const renewalMonthlyEur = renewalKnown
     ? roundMoney(selected.reduce((sum, item) => sum + (item.renewalMonthlyEur ?? 0), 0))
     : undefined
-  const withinBudget = input.budgetEurMonthly == null ? null : monthlyEur <= input.budgetEurMonthly
+  const withinBudget = input.budgetEurMonthly == null || !complete ? null : monthlyEur <= input.budgetEurMonthly
 
   const rationale = selected.map((item) => `${item.product.vendor} ${item.product.name}: ${item.featureFit}% required-feature fit; first-term equivalent €${item.monthlyEur}/mo.`)
   const missingCategories = input.categories.filter((category) => !selected.some((item) => item.product.category === category))
   for (const category of missingCategories) rationale.push(`No ${category} product in the current catalog satisfies all hard requirements for that category.`)
-  if (input.budgetEurMonthly != null) rationale.push(withinBudget ? 'The selected stack fits the stated monthly planning budget.' : 'The selected stack exceeds the stated monthly planning budget.')
+  if (input.budgetEurMonthly != null && complete) rationale.push(withinBudget ? 'The selected stack fits the stated monthly planning budget.' : 'The selected stack exceeds the stated monthly planning budget.')
   if (renewalMonthlyEur != null && renewalMonthlyEur > monthlyEur * 1.15) rationale.push('Renewal-normalized cost is materially higher than the introductory first-term equivalent.')
 
-  return { selected, monthlyEur, renewalMonthlyEur, withinBudget, rationale, fxAsOf: FX_AS_OF }
+  return { selected, complete, monthlyEur, renewalMonthlyEur, withinBudget, rationale, fxAsOf: FX_AS_OF }
 }
 
 export function compareProducts(products: Product[], productIds: string[], requirements: Feature[] = []): ProductScore[] {
@@ -85,11 +86,14 @@ export function optimizeCurrentStack(products: Product[], currentProductIds: str
 
   const currentMonthlyEur = roundMoney(current.reduce((sum, item) => sum + item.cost.firstTermMonthlyEur, 0))
   const recommendation = recommendStack(products, input)
+  const comparable = recommendation.complete
+  const monthlySavingEur = comparable ? roundMoney(currentMonthlyEur - recommendation.monthlyEur) : undefined
   return {
     currentMonthlyEur,
     recommendedMonthlyEur: recommendation.monthlyEur,
-    monthlySavingEur: roundMoney(currentMonthlyEur - recommendation.monthlyEur),
-    annualizedSavingEur: roundMoney((currentMonthlyEur - recommendation.monthlyEur) * 12),
+    monthlySavingEur,
+    annualizedSavingEur: monthlySavingEur == null ? undefined : roundMoney(monthlySavingEur * 12),
+    comparable,
     recommendation,
   }
 }

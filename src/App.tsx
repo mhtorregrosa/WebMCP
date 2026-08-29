@@ -18,7 +18,7 @@ export default function App() {
   const [agentUpdate, setAgentUpdate] = useState(false)
 
   useEffect(() => {
-    let cleanup = () => undefined
+    let cleanup: () => void = () => undefined
     registerWebMCPTools((input) => {
       setAgentUpdate(true)
       if (input.categories) setSelectedCategories(input.categories)
